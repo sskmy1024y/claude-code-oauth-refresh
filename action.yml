@@ -1,0 +1,176 @@
+name: 'Claude Code OAuth Refresh'
+description: 'Authenticate with Claude Code using OAuth 2.0 flow'
+author: 'SHO Yamashita <sskmy1024.y@gmail.com>'
+branding:
+  icon: 'log-in'
+  color: 'orange'
+
+permissions:
+  actions: write  # Required for cache management (create/delete cache entries)
+  contents: read  # Required for basic repository access
+
+inputs:
+  secrets_admin_pat:
+    description: 'Personal Access Token with secrets:write permission'
+    required: false
+    default: ''
+
+outputs:
+  success:
+    description: 'Whether the OAuth login was successful'
+    value: ${{ steps.oauth.outputs.success }}
+  expires_at:
+    description: 'Token expiration timestamp (milliseconds)'
+    value: ${{ steps.oauth.outputs.expires_at }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: 1.2.17
+
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        cd ${GITHUB_ACTION_PATH}
+        bun install
+
+
+    - name: Run OAuth Flow
+      id: oauth
+      shell: bash
+      run: |
+        cd ${GITHUB_ACTION_PATH}
+        echo "🔐 Updating OAuth credentials..."
+        
+        # Clear any existing credentials file from cache
+        rm -f credentials.json
+        
+        # Run the credential update process
+        if bun run index.ts; then
+          # Success case
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "╔══════════════════════════════════════════════════════════════════════════╗" >> $GITHUB_STEP_SUMMARY
+            echo "║                                                                          ║" >> $GITHUB_STEP_SUMMARY
+            echo "║                     ✨ Claude Code OAuth Refresh ✨                      ║" >> $GITHUB_STEP_SUMMARY
+            echo "║                                                                          ║" >> $GITHUB_STEP_SUMMARY
+            echo "╚══════════════════════════════════════════════════════════════════════════╝" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "     by @sskmy1024y" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "   ─────────────────────────────────────────────────────────────────────" >> $GITHUB_STEP_SUMMARY
+            echo "                         【 OAuth Complete! 】" >> $GITHUB_STEP_SUMMARY
+            echo "   ─────────────────────────────────────────────────────────────────────" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## 🎉 Authentication Successful!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ OAuth Flow Complete" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Your Claude Code credentials have been successfully generated and saved!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🔐 Stored as GitHub Secrets" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "The following secrets have been created/updated in your repository:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Secret Name | Description |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------------|-------------|" >> $GITHUB_STEP_SUMMARY
+            echo "| \`CLAUDE_ACCESS_TOKEN\` | OAuth access token for Claude API |" >> $GITHUB_STEP_SUMMARY
+            echo "| \`CLAUDE_REFRESH_TOKEN\` | OAuth refresh token for token renewal |" >> $GITHUB_STEP_SUMMARY
+            echo "| \`CLAUDE_EXPIRES_AT\` | Token expiration timestamp (milliseconds) |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 📁 Generated Files" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| File | Description | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|------|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| \`credentials.json\` | OAuth tokens (local file) | ✅ Created |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "### 🚀 What's Next?" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "You can now use these secrets in your workflows:" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "[see example workflow](https://github.com/${{ github.repository }}#using-the-oauth-credentials)" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "---" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "┌─────────────────────────────────────────────────────────────────────┐" >> $GITHUB_STEP_SUMMARY
+            echo "│                       🎯 AUTHENTICATION COMPLETE!                   │" >> $GITHUB_STEP_SUMMARY
+            echo "│                         Ready to use Claude Code                    │" >> $GITHUB_STEP_SUMMARY
+            echo "└─────────────────────────────────────────────────────────────────────┘" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            
+            echo "✅ OAuth credentials updated successfully!"
+            echo "success=true" >> $GITHUB_OUTPUT
+            
+            # Extract token values from credentials.json
+            ACCESS_TOKEN=$(jq -r '.claudeAiOauth.accessToken' credentials.json)
+            REFRESH_TOKEN=$(jq -r '.claudeAiOauth.refreshToken' credentials.json)
+            EXPIRES_AT=$(jq -r '.claudeAiOauth.expiresAt' credentials.json)
+            
+            # Store tokens as GitHub secrets using PAT
+            if [ -z "${{ inputs.secrets_admin_pat }}" ]; then
+              echo "❌ Error: SECRETS_ADMIN_PAT is not configured!"
+              echo ""
+              echo "This action requires a Personal Access Token to securely store the OAuth tokens as GitHub secrets."
+              echo "Please follow the setup instructions in the README.md to create and configure SECRETS_ADMIN_PAT."
+              echo ""
+              echo "See: https://github.com/${{ github.repository }}#prerequisites-setting-up-secrets_admin_pat"
+              exit 1
+            fi
+
+            export GH_TOKEN="${{ inputs.secrets_admin_pat }}"
+            echo "$ACCESS_TOKEN" | gh secret set CLAUDE_ACCESS_TOKEN --repo ${{ github.repository }}
+            echo "$REFRESH_TOKEN" | gh secret set CLAUDE_REFRESH_TOKEN --repo ${{ github.repository }}
+            echo "$EXPIRES_AT" | gh secret set CLAUDE_EXPIRES_AT --repo ${{ github.repository }}
+            echo "✅ Tokens stored as GitHub secrets!"
+        else
+          # Failure case
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "╔══════════════════════════════════════════════════════════════════════════╗" >> $GITHUB_STEP_SUMMARY
+          echo "║                                                                          ║" >> $GITHUB_STEP_SUMMARY
+          echo "║                     ✨ Claude Code OAuth Refresh ✨                      ║" >> $GITHUB_STEP_SUMMARY
+          echo "║                                                                          ║" >> $GITHUB_STEP_SUMMARY
+          echo "╚══════════════════════════════════════════════════════════════════════════╝" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "     by @sskmy1024y" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "   ─────────────────────────────────────────────────────────────────────" >> $GITHUB_STEP_SUMMARY
+          echo "                       【 Authentication Failed 】" >> $GITHUB_STEP_SUMMARY
+          echo "   ─────────────────────────────────────────────────────────────────────" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ❌ Authentication Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔍 Possible Issues" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Issue | Solution |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Claude CLI not installed** | Ensure Claude CLI is installed locally |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Not logged in** | Run 'claude login' locally first |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Expired credentials** | Re-authenticate locally with 'claude login' |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔄 Prerequisites" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Install Claude CLI locally" >> $GITHUB_STEP_SUMMARY
+          echo "2. Run 'claude login' to authenticate" >> $GITHUB_STEP_SUMMARY
+          echo "3. Run this workflow again" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "┌─────────────────────────────────────────────────────────────────────┐" >> $GITHUB_STEP_SUMMARY
+          echo "│                     ⚠️  AUTHENTICATION FAILED                       │" >> $GITHUB_STEP_SUMMARY
+          echo "│                        Please check prerequisites                    │" >> $GITHUB_STEP_SUMMARY
+          echo "└─────────────────────────────────────────────────────────────────────┘" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          
+          echo "❌ Failed - Please check the summary for troubleshooting steps"
+          echo "success=false" >> $GITHUB_OUTPUT
+        fi
+
+
